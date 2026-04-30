@@ -16,7 +16,7 @@ estadisticas = {    #en este caso es un diccionario
     "DNS": 0,
     "ICMP": 0,
     "OTRO": 0,
-    "PROTOCOLOS TOTALES": 0
+    "total": 0
 }
 
 COLORES = {
@@ -25,7 +25,7 @@ COLORES = {
     "DNS":  "magenta",
     "ICMP": "red",
     "OTRO": "white",
-    "PROTOCOLOS TOTALES": "green"
+    "total": "green"
 }
 
 def obtener_protocolo(paquete):
@@ -40,7 +40,7 @@ def obtener_protocolo(paquete):
     elif paquete.haslayer("ICMP"):
         return "ICMP"
     else:
-        return "OTRO PROTOCOLO"
+        return "OTRO"
 
 def analizar_paquete(paquete):
     global estadisticas
@@ -52,8 +52,11 @@ def analizar_paquete(paquete):
     protocolo = obtener_protocolo(paquete)
     origen = ip.src
     destino = ip.dst
-    color = COLORES[protocolo] #ACA QUEDASTE
-    
+    color = COLORES[protocolo]
+
+    estadisticas[protocolo] += 1
+    estadisticas["total"] += 1
+
     puerto_origen = ""
     puerto_destino = ""
     
@@ -69,10 +72,37 @@ def analizar_paquete(paquete):
     else:
         print(f"[{protocolo}] {origen} -> {destino}")
 
+def mostrar_resumen():
+    tabla = Table(title="Resumen de captura", box = box.ROUNDED)
 
-print("INICIANDO CAPTURA DE PAQUETES || CTL + C PARA DETENER")
+    tabla.add_column("Protocolo", style = "bold")
+    tabla.add_column("Paquetes", justify = "right")
+    tabla.add_column("Porcentaje", justify = "right")
 
-sniff(prn = analizar_paquete, store = False, count = 20)
+    total = estadisticas["total"]
+
+    for protocolo in ["TCP", "UDP", "DNS", "ICMP", "OTRO"]:
+        cantidad = estadisticas[protocolo]
+        if total > 0:
+            porcentaje = f"{(cantidad / total *100):.1f}%"
+        else:
+            porcentaje = "0%"
+        color = COLORES[protocolo]
+        tabla.add_row(f"[{color}]{protocolo}[/{color}]", str(cantidad), porcentaje)
+    
+    tabla.add_row("[bold]TOTAL[/bold]", str(total), "100%")
+    console.print(tabla)
+
+
+console.print("[bold green]INICIANDO CAPTURA DE PAQUETES || CTL + C PARA DETENER[/bold green]")
+
+try:
+    sniff(prn = analizar_paquete, store = False, count = 20)
+except KeyboardInterrupt:
+    pass
+console.print("\n[bold yellow]Captura detenida.[/bold yellow]")
+mostrar_resumen()
+
 """
 prn es un CallBack que se llama cada que encuentra un paquete
 store = False hace que no guarde los paquetes en la RAM para ahoorar recursos
