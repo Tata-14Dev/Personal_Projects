@@ -2,6 +2,8 @@ from scapy.all import sniff
 from rich.console import Console
 from rich.table import Table
 from rich import box
+import argparse
+from datetime import datetime
 
 #haslayer pregunta si tiene un protocolo, en este caso IP (pero puede ser TCP, UDP, ICMP, DNS)
 #getlayer accede a los protocolos
@@ -28,6 +30,9 @@ COLORES = {
     "total": "green"
 }
 
+filtro_protocolo = None
+archivo_output = None
+
 def obtener_protocolo(paquete):
     """DEVUELVE EL PROTOCOLO PRINCIPAL DEL PAQUETE COMO UN STRING"""
     if paquete.haslayer("TCP"):
@@ -42,6 +47,12 @@ def obtener_protocolo(paquete):
     else:
         return "OTRO"
 
+def guardar_en_archivo(linea):
+    """ Abre el archivo en Append y guarda cada linea de los paquetes """
+    if archivo_output:
+        with open(archivo_output, "a") as f:
+            f.write(linea + "\n")
+
 def analizar_paquete(paquete):
     global estadisticas
     #Solo procesa los paquetes IP
@@ -53,6 +64,9 @@ def analizar_paquete(paquete):
     origen = ip.src
     destino = ip.dst
     color = COLORES[protocolo]
+
+    if filtro_protocolo and protocolo != filtro_protocolo:
+        return
 
     estadisticas[protocolo] += 1
     estadisticas["total"] += 1
@@ -67,10 +81,16 @@ def analizar_paquete(paquete):
         puerto_origen = paquete.getlayer("UDP").sport
         puerto_destino = paquete.getlayer("UDP").dport
     
+    timestamp = datetime.now().strftime("%H:%M:%S")
+
     if puerto_origen:
-        print(f"[{protocolo}] {origen}:{puerto_origen} -> {destino}:{puerto_destino}")      #el f"" lo que hace es darle un formato de salida al string
+        linea = f"[{protocolo}] {origen}:{puerto_origen} -> {destino}:{puerto_destino}"      #el f"" lo que hace es darle un formato de salida al string
     else:
-        print(f"[{protocolo}] {origen} -> {destino}")
+        linea = f"[{protocolo}] {origen} -> {destino}"
+    
+    console.print(f"[dim]{timestamp}[/dim] [bold {color}][{protocolo}][/bold {color}] {linea[21:]}")
+    guardar_en_archivo(linea)
+
 
 def mostrar_resumen():
     tabla = Table(title="Resumen de captura", box = box.ROUNDED)
@@ -93,11 +113,34 @@ def mostrar_resumen():
     tabla.add_row("[bold]TOTAL[/bold]", str(total), "100%")
     console.print(tabla)
 
+    if archivo_output:
+        console.print(f"[dim]Logs guardados en : {archivo_output}[/dim]")
+
+
+#Argumentos de la linea de comandos
+parser = argparse.ArgumentParser(description="Analizador de tráfico de red")
+parser.add_argument(
+    "--protocolo",
+    choices=["TCP", "UDP", "DNS", "ICMP"],
+    help="Filtrar por protocolo especifico"
+)
+parser.add_argument(
+    "--output",
+    help="Archivo donde guardar el log"
+)
+args = parser.parse_args()
+
+filtro_protocolo = args.protocolo
+archivo_output = args.output
+
+#Inicio del programa
+if filtro_protocolo:
+    console.print(f"[bold green] Filtrando solo: {filtro_protocolo} [/bold green]")
 
 console.print("[bold green]INICIANDO CAPTURA DE PAQUETES || CTL + C PARA DETENER[/bold green]")
 
 try:
-    sniff(prn = analizar_paquete, store = False, count = 20)
+    sniff(prn = analizar_paquete, store = False, count = 0)
 except KeyboardInterrupt:
     pass
 console.print("\n[bold yellow]Captura detenida.[/bold yellow]")
