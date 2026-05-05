@@ -4,7 +4,6 @@ from rich.table import Table
 from rich import box
 import argparse
 from datetime import datetime
-from collections import defaultdict, Counter
 
 #haslayer pregunta si tiene un protocolo, en este caso IP (pero puede ser TCP, UDP, ICMP, DNS)
 #getlayer accede a los protocolos
@@ -76,10 +75,6 @@ def analizar_paquete(paquete):
     estadisticas[protocolo] += 1
     estadisticas["total"] += 1
 
-    paquetes_por_ip[origen] += 1
-    bytes_por_ip += len(paquete)
-    conexiones[f"{origen} → {destino}"] += 1
-
     puerto_origen = ""
     puerto_destino = ""
     
@@ -126,11 +121,6 @@ def mostrar_resumen():
     if archivo_output:
         console.print(f"[dim]Logs guardados en : {archivo_output}[/dim]")
 
-def mostrar_top_talkers():
-    tabla_ips = Table(title="10 IPs mas activas", box=box.ROUNDED)
-    tabla_ips.add_column("IP ORIGEN", style="bold cyan")
-    tabla_ips.add_column("Paquetes", justify="right")
-    tabla_ips.add_column("Datos transferidos", justify="right")
 
 #Argumentos de la linea de comandos
 parser = argparse.ArgumentParser(description="Analizador de tráfico de red")
