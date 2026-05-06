@@ -1,10 +1,14 @@
+#Comenzando etapa 6
+
 from scapy.all import sniff
 from rich.console import Console
 from rich.table import Table
 from rich import box
-import argparse
+from rich.prompt import Prompt, Confirm
 from datetime import datetime
 from collections import defaultdict, Counter
+import sys
+import argparse
 
 #haslayer pregunta si tiene un protocolo, en este caso IP (pero puede ser TCP, UDP, ICMP, DNS)
 #getlayer accede a los protocolos
@@ -77,7 +81,7 @@ def analizar_paquete(paquete):
     estadisticas["total"] += 1
 
     paquetes_por_ip[origen] += 1
-    bytes_por_ip += len(paquete)
+    bytes_por_ip[origen] += len(paquete)
     conexiones[f"{origen} → {destino}"] += 1
 
     puerto_origen = ""
@@ -125,6 +129,8 @@ def mostrar_resumen():
 
     if archivo_output:
         console.print(f"[dim]Logs guardados en : {archivo_output}[/dim]")
+    
+    mostrar_top_talkers()
 
 def mostrar_top_talkers():
     tabla_ips = Table(title="10 IPs mas activas", box=box.ROUNDED)
@@ -132,25 +138,83 @@ def mostrar_top_talkers():
     tabla_ips.add_column("Paquetes", justify="right")
     tabla_ips.add_column("Datos transferidos", justify="right")
 
-#Argumentos de la linea de comandos
-parser = argparse.ArgumentParser(description="Analizador de tráfico de red")
-parser.add_argument(
-    "--protocolo",
-    choices=["TCP", "UDP", "DNS", "ICMP"],
-    help="Filtrar por protocolo especifico"
-)
-parser.add_argument(
-    "--output",
-    help="Archivo donde guardar el log"
-)
-args = parser.parse_args()
+    for ip, cantidad in paquetes_por_ip.most_common(10):
+        bytes_total = bytes_por_ip[ip]
 
-filtro_protocolo = args.protocolo
-archivo_output = args.output
+        if bytes_total >= 1_000_000:
+            tamanio = f"{bytes_total / 1_000_000:.1f} MB"
+        elif bytes_total >= 1_000:
+            tamanio = f"{bytes_total / 1_000:.1f} KB"
+        else:
+            tamanio = f"{bytes_total} B"
 
-#Inicio del programa
+        tabla_ips.add_row(ip, str(cantidad), tamanio)
+
+    console.print(tabla_ips)
+
+    tabla_frecuentes = Table(title = "Top 5 - Conexiones más frecuentes", box = box.ROUNDED)
+    tabla_frecuentes.add_column("Conexión", style = "bold yellow")
+    tabla_frecuentes.add_column("Paquetes", justify = "right")
+
+    for conexion, cantidad in conexiones.most_common(5):
+        tabla_frecuentes.add_row(conexion, str(cantidad))
+
+    console.print(tabla_frecuentes)
+
+def mostrar_menu():
+    console.print("\n[bold cyan]╔══════════════════════════════════════╗[/bold cyan]")
+    console.print("[bold cyan]║       NETWORK TRAFFIC ANALYZER       ║[/bold cyan]")
+    console.print("[bold cyan]╚══════════════════════════════════════╝[/bold cyan]\n")
+
+    console.print("[bold]1. Filtro de protocolo[/bold]")
+    console.print("   [dim]Dejá vacío para capturar todos[/dim]")
+    protocolo = Prompt.ask(
+        "   Protocolo",
+        choices=["TCP", "UCP", "DNS", "ICMP", "TODOS"],
+        default="TODOS"
+    )
+
+    console.print("\n[bold]2. Guardar log[/bold]")
+    guardar = Confirm.ask("   ¿Querés guardar la captura en un archivo?", default=False)
+
+    nombre_archivo = None
+    if guardar:
+        nombre_archivo = Prompt.ask(
+            "   Nombre del archivo",
+            default=f"captura_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        )
+
+    return protocolo, nombre_archivo
+
+
+#Punto de entrada con argparser
+if len(sys.argv) > 1:
+    parser = argparse.ArgumentParser(description = "Analizador de trafico de red")
+    parser.add_argument(
+        "--protocolo",
+        choices = ["TCP", "UCP", "DNS", "ICMP"],
+        help = "Filtrar por protocolo exclusivo"
+    )
+    parser.add_argument(
+        "--output",
+        help = "Archivo donde guardar el log (ej: captura.log)"
+    )
+    args = parser.parse_args()
+    filtro_protocolo = args.protocolo
+    archivo_output = args.output
+
+else:
+    protocolo_elegido, archivo_elegido = mostrar_menu()
+    filtro_protocolo = None if protocolo_elegido == "TODOS" else protocolo_elegido
+    archivo_output = archivo_elegido
+
+
+#Inicio de captura
 if filtro_protocolo:
     console.print(f"[bold green] Filtrando solo: {filtro_protocolo} [/bold green]")
+if archivo_output:
+    console.print(f"[bold green] Guardando en : {archivo_output}[/bold green]")
+
 
 console.print("[bold green]INICIANDO CAPTURA DE PAQUETES || CTL + C PARA DETENER[/bold green]")
 
@@ -158,6 +222,7 @@ try:
     sniff(prn = analizar_paquete, store = False, count = 0)
 except KeyboardInterrupt:
     pass
+
 console.print("\n[bold yellow]Captura detenida.[/bold yellow]")
 mostrar_resumen()
 
